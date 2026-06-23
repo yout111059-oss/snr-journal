@@ -1093,4 +1093,80 @@ function renderSettings() {
 
   const info = document.createElement('div');
   info.style.cssText = 'padding:16px;font-size:11px;color:var(--text3);text-align:center;line-height:1.8';
-  info.innerHTML = 'S... （4 KB 剩餘）
+  info.innerHTML = 'SNR Journal v3.0<br>資料存於此裝置（localStorage）<br>定期匯出 JSON 備份保護資料';
+  body.appendChild(info);
+}
+
+// ─────────────────────────────────────────
+// EXPORT / IMPORT
+// ─────────────────────────────────────────
+function exportJSON() {
+  const data = JSON.stringify({version:3, exportTime:Date.now(), trades}, null, 2);
+  const blob = new Blob([data], {type:'application/json'});
+  dl(blob, `SNR_backup_${fmtDate(Date.now()).replace(/\//g,'-')}.json`);
+  showToast('✅ JSON 匯出成功');
+}
+
+function exportCSV() {
+  const rows = [['ID','日期','開單時間','方向','時間框架','交易類型','Entry Conf','RR','情緒','備註','損益','結果','平倉時間','平倉備註']];
+  trades.forEach(t => {
+    rows.push([
+      t.id, fmtDate(t.openTime), fmtTime(t.openTime),
+      t.direction, (t.timeframes||[]).join('/'), (t.tradeTypes||[]).join('/'), (t.entryConf||[]).join('/'),
+      t.rr??'', t.emotion||'', t.note||'', t.pnl??'',
+      t.result||'open', t.closeTime?fmtDateTime(t.closeTime):'', t.closeNote||''
+    ]);
+  });
+  const csv = rows.map(r=>r.map(c=>`"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['\uFEFF'+csv], {type:'text/csv;charset=utf-8'});
+  dl(blob, `SNR_trades_${fmtDate(Date.now()).replace(/\//g,'-')}.csv`);
+  showToast('✅ CSV 匯出成功');
+}
+
+function dl(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=name; a.click();
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('imp-file').addEventListener('change', function() {
+  const file = this.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const imp = data.trades || (Array.isArray(data)?data:[]);
+      let cnt = 0;
+      imp.forEach(t => { if (!trades.find(x=>x.id===t.id)) { trades.unshift(t); cnt++; } });
+      saveTrades();
+      showToast(`✅ 匯入 ${cnt} 筆成功`);
+      renderHome();
+    } catch { showToast('❌ 匯入失敗，格式錯誤'); }
+    this.value = '';
+  };
+  reader.readAsText(file);
+});
+
+// ─────────────────────────────────────────
+// NAV BINDING
+// ─────────────────────────────────────────
+document.querySelectorAll('.nav-btn').forEach(btn => {
+  btn.addEventListener('click', () => goPage(btn.dataset.pg));
+});
+
+// ─────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────
+loadTrades();
+// show home page (already displayed by default in HTML)
+document.getElementById('pg-home').style.display = 'block';
+document.querySelectorAll('.pg').forEach(el => {
+  if (el.id !== 'pg-home') el.style.display = 'none';
+});
+renderHome();
+resetOpenForm();
+renderSettings();
+</script>
+</body>
+</html>
